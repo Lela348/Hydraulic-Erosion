@@ -21,6 +21,13 @@ public class Erosion : MonoBehaviour {
     public float initialWaterVolume = 1;
     public float initialSpeed = 1;
 
+
+    // Thermal
+    int[] offsets;
+    [Range(30, 90)]
+    public float talusAngle = 45f;
+    
+
     // Indices and weights of erosion brush precomputed for every node
     int[][] erosionBrushIndices;
     float[][] erosionBrushWeights;
@@ -41,6 +48,11 @@ public class Erosion : MonoBehaviour {
             InitializeBrushIndices (mapSize, erosionRadius);
             currentErosionRadius = erosionRadius;
             currentMapSize = mapSize;
+            offsets = new int[] {
+            -mapSize - 1, -mapSize, -mapSize + 1,
+            -1,+1,
+            +mapSize - 1, +mapSize, +mapSize + 1
+            };
         }
     }
 
@@ -125,6 +137,52 @@ public class Erosion : MonoBehaviour {
                 water *= (1 - evaporateSpeed);
             }
         }
+    }
+
+    public void ErodeThermal(float[] map, int mapSize)
+    {
+        //for each cell
+        for (int i = 0; i < map.Length; i++)
+        {
+            float current = map[i];
+            int x = i % mapSize;
+
+            //check highest drop to neighbouring cell //beware of edge nodes!!
+            for (int j = 0; j < 8; j++)
+            {
+                int offset = offsets[j];
+                int nIndex = i + offset;
+
+                // Bounds check (top/bottom)
+                if (nIndex < 0 || nIndex >= map.Length)
+                    continue;
+
+                // Bounds check (left/right)
+                if ((offset == -1 || offset == -mapSize - 1 || offset == +mapSize - 1) && x == 0)
+                    continue;
+
+                if ((offset == +1 || offset == -mapSize + 1 || offset == +mapSize + 1) && x == mapSize - 1)
+                    continue;
+
+                float neighbor = map[nIndex];
+
+                //calculate slope
+                float delta = current - neighbor;
+
+                //check if the slope is above threshold angle
+                if (delta > talusAngle)
+                {
+                    //calculate how much should be moved
+                    float transport = delta * thermalRate;
+
+                    //move along previously calculated slope (update height of grip-point)
+                    map[i] -= transport;
+                    map[nIndex] += transport;
+                }
+            }
+        }
+
+        //be happy that everything worked out
     }
 
     HeightAndGradient CalculateHeightAndGradient (float[] nodes, int mapSize, float posX, float posY) {
