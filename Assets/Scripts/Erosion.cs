@@ -26,6 +26,8 @@ public class Erosion : MonoBehaviour {
     int[] offsets;
     [Range(30, 90)]
     public float talusAngle = 45f;
+    [Range(1, 20)]
+    public int thermalErosionSpeed = 1;
     
 
     // Indices and weights of erosion brush precomputed for every node
@@ -135,6 +137,11 @@ public class Erosion : MonoBehaviour {
                 // Update droplet's speed and water content
                 speed = Mathf.Sqrt (speed * speed + deltaHeight * gravity);
                 water *= (1 - evaporateSpeed);
+
+                if (iteration % thermalErosionSpeed == 0)
+                {
+                    ErodeThermal(map, mapSize);
+                }
             }
         }
     }
@@ -142,16 +149,16 @@ public class Erosion : MonoBehaviour {
     public void ErodeThermal(float[] map, int mapSize)
     {
         //for each cell
-        for (int i = 0; i < map.Length; i++)
+        for (int cell = 0; cell < map.Length; cell++)
         {
-            float current = map[i];
-            int x = i % mapSize;
+            float current = map[cell];
+            int x = cell % mapSize;
 
             //check highest drop to neighbouring cell //beware of edge nodes!!
             for (int j = 0; j < 8; j++)
             {
                 int offset = offsets[j];
-                int nIndex = i + offset;
+                int nIndex = cell + offset;
 
                 // Bounds check (top/bottom)
                 if (nIndex < 0 || nIndex >= map.Length)
@@ -173,10 +180,10 @@ public class Erosion : MonoBehaviour {
                 if (delta > talusAngle)
                 {
                     //calculate how much should be moved
-                    float transport = delta * thermalRate;
+                    float transport = delta/2;
 
                     //move along previously calculated slope (update height of grip-point)
-                    map[i] -= transport;
+                    map[cell] -= transport;
                     map[nIndex] += transport;
                 }
             }

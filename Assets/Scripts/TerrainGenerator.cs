@@ -29,6 +29,11 @@ public class TerrainGenerator : MonoBehaviour {
     [Range (0, 1)]
     public float inertia = 0.3f;
 
+    [Header("Erosion Settings")]
+    [Range(0, 90)]
+    public int talusAngle = 45;
+    public int thermalIterations = 2;
+
     // Internal
     float[] map;
     Mesh mesh;
@@ -43,6 +48,9 @@ public class TerrainGenerator : MonoBehaviour {
     }
 
     public void Erode () {
+        int hydraulicKernel = erosion.FindKernel("CSMain");
+        int thermalKernel = erosion.FindKernel("ThermalCS");
+
         int numThreads = numErosionIterations / 1024;
 
         // Create brush
@@ -88,6 +96,7 @@ public class TerrainGenerator : MonoBehaviour {
 
         // Heightmap buffer
         ComputeBuffer mapBuffer = new ComputeBuffer (map.Length, sizeof (float));
+        ComputeBuffer mapOutBuffer = new ComputeBuffer(map.Length, sizeof(float));
         mapBuffer.SetData (map);
         erosion.SetBuffer (0, "map", mapBuffer);
 
@@ -105,10 +114,41 @@ public class TerrainGenerator : MonoBehaviour {
         erosion.SetFloat ("gravity", gravity);
         erosion.SetFloat ("startSpeed", startSpeed);
         erosion.SetFloat ("startWater", startWater);
+        erosion.SetInt ("talusAngle", talusAngle);
 
-        // Run compute shader
-        erosion.Dispatch (0, numThreads, 1, 1);
-        mapBuffer.GetData (map);
+
+        for (int i = 0; i < 2; i++) // you can increase this later
+        {
+            // -------------------------
+            // HYDRAULIC PASS
+            // -------------------------
+            erosion.SetBuffer(hydraulicKernel, "map", mapBuffer);
+            erosion.Dispatch(hydraulicKernel, numThreads, 1, 1);
+
+            // -------------------------
+            // THERMAL PASSES
+            // -------------------------
+            for (int j = 0; j < thermalIterations; j++)
+            {
+                // Clear output buffer
+                float[] empty = new float[map.Length];
+                mapOutBuffer.SetData(empty);
+
+                erosion.SetBuffer(thermalKernel, "map", mapBuffer);
+                erosion.SetBuffer(thermalKernel, "mapOut", mapOutBuffer);
+
+                erosion.SetInt("mapSize", mapSizeWithBorder);
+
+                erosion.Dispatch(thermalKernel, mapSizeWithBorder / 8, mapSizeWithBorder / 8, 1);
+
+                // Swap buffers
+                var temp = mapBuffer;
+                mapBuffer = mapOutBuffer;
+                mapOutBuffer = temp;
+            }
+        }
+
+        mapBuffer.GetData(map);
 
         // Release buffers
         mapBuffer.Release ();
