@@ -44,7 +44,7 @@ public class TerrainGenerator : MonoBehaviour {
 
     public void GenerateHeightMap () {
         mapSizeWithBorder = mapSize + erosionBrushRadius * 2;
-        map = FindFirstObjectByType<HeightMapGenerator> ().GenerateHeightMap (mapSizeWithBorder);
+        map = FindFirstObjectByType<HeightMapGenerator>().GenerateHeightMap(mapSizeWithBorder);
     }
 
     public void Erode () {
@@ -119,6 +119,8 @@ public class TerrainGenerator : MonoBehaviour {
 
         for (int i = 0; i < 2; i++) // you can increase this later
         {
+            erosion.SetInt("talusAngle", talusAngle);
+            ComputeBuffer debugBuffer = new ComputeBuffer(mapSize, sizeof(float));
             // -------------------------
             // HYDRAULIC PASS
             // -------------------------
@@ -132,14 +134,19 @@ public class TerrainGenerator : MonoBehaviour {
             {
                 // Clear output buffer
                 float[] empty = new float[map.Length];
-                mapOutBuffer.SetData(empty);
 
                 erosion.SetBuffer(thermalKernel, "map", mapBuffer);
                 erosion.SetBuffer(thermalKernel, "mapOut", mapOutBuffer);
 
                 erosion.SetInt("mapSize", mapSizeWithBorder);
+                erosion.SetBuffer(thermalKernel, "debugBuffer", debugBuffer);
 
                 erosion.Dispatch(thermalKernel, mapSizeWithBorder / 8, mapSizeWithBorder / 8, 1);
+                float[] data = new float[mapSize];
+                debugBuffer.GetData(data);
+                for (int k = 0; k < data.Length; k++) {
+                    Debug.Log($"Data at index {k}: {data[k]}");
+                }
 
                 // Swap buffers
                 var temp = mapBuffer;

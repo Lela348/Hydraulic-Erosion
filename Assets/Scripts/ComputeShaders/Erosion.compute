@@ -1,17 +1,19 @@
 ﻿#pragma kernel CSMain
 #pragma kernel ThermalCS
 
-float talusAngle;
+int talusAngle;
 RWStructuredBuffer<float> mapOut;
 
 RWStructuredBuffer<float> map;
 StructuredBuffer<int> randomIndices;
 StructuredBuffer<int> brushIndices;
 StructuredBuffer<float> brushWeights;
+RWStructuredBuffer<float> debugBuffer;
 
 int mapSize;
 int brushLength;
 int borderSize;
+uint debugIndex;
 
 int maxLifetime;
 float inertia;
@@ -142,10 +144,16 @@ void ThermalCS(uint3 id : SV_DispatchThreadID)
     if (x >= mapSize || y >= mapSize)
         return;
 
-    int index = y * mapSize + x;
+    uint index = y * mapSize + x;
     float current = map[index];
+    
+    mapOut[index] = map[index];
 
-    float totalDelta = 0;
+    int indices[8] = { 0, 0, 0, 0, 0, 0, 0, 0}; // 8-neighbour indices
+    float deltas[8] = { 0, 0,0,0,0,0,0,0};
+    float slopes[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    float totalDeltaSum = 0; //sum of all height differences to neighbors w/ talus angle exceeded
+    float maxSediment = 0;
 
     // 8-neighbour offsets
     int2 offsets[8] =
@@ -155,6 +163,10 @@ void ThermalCS(uint3 id : SV_DispatchThreadID)
         int2(-1, -1), int2(1, -1),
         int2(-1, 1), int2(1, 1)
     };
+    
+    if (index < mapSize || index % mapSize == mapSize - 1 || index > mapSize * (mapSize - 1) || index % mapSize == 0)
+        return;
+    
 
     for (int i = 0; i < 8; i++)
     {
@@ -162,23 +174,58 @@ void ThermalCS(uint3 id : SV_DispatchThreadID)
         int ny = y + offsets[i].y;
 
         // bounds check
-        if (nx < 0 || nx >= mapSize || ny < 0 || ny >= mapSize)
+        if (nx <= 0 || nx >= mapSize || ny <= 0 || ny >= mapSize)
             continue;
 
         int nIndex = ny * mapSize + nx;
+        
+        indices[i] = nIndex;
         float neighbor = map[nIndex];
 
         float delta = current - neighbor;
-
-        if (delta > talusAngle)
+        float slope = (delta / length(offsets[i]))*100;
+        slopes[i] = slope;
+        float tanTalus = tan(radians(talusAngle));
+        
+        if (debugIndex < 512)
         {
-            float transport = delta * 0.5;
+            debugBuffer[debugIndex] = slope;
+            debugBuffer[debugIndex + 1] = tanTalus;
+            debugIndex += 2;
+        }
 
-            totalDelta -= transport;
-
-            mapOut[nIndex] += transport;
+        if (delta > 0 && slope > tanTalus)
+        {
+            deltas[i] = delta;
+            totalDeltaSum += delta;
         }
     }
 
-    mapOut[index] += current + totalDelta;
+    if(totalDeltaSum == 0)
+        return;
+    
+    float maxVal = deltas[0];
+
+    [unroll]
+    for (int j = 1; j < 8; j++)
+    {
+        maxVal = max(maxVal, deltas[j]);
+    }
+    maxSediment = maxVal * 0.4;
+    
+    float totalSediment = 0;
+    [unroll]
+    for (int k = 0; k < 8; k++)
+    {
+        if (deltas[k] == 0)
+            continue;
+        
+        
+        float sediment = maxSediment * (deltas[k] / totalDeltaSum);
+        // add to bi
+        mapOut[indices[k]] += sediment;
+        totalSediment += sediment;
+    }
+    mapOut[index] -= totalSediment;
+    
 }
