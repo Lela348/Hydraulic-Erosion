@@ -8,6 +8,8 @@ public class HeightMapGenerator : MonoBehaviour {
     public float persistence = .5f;
     public float lacunarity = 2;
     public float initialScale = 2;
+    [Range(0, 1)]
+    public float warpStrength = 0.5f;
 
     public bool useComputeShader = true;
     public ComputeShader heightMapComputeShader;
@@ -48,6 +50,7 @@ public class HeightMapGenerator : MonoBehaviour {
         heightMapComputeShader.SetFloat ("lacunarity", lacunarity);
         heightMapComputeShader.SetFloat ("persistence", persistence);
         heightMapComputeShader.SetFloat ("scaleFactor", initialScale);
+        heightMapComputeShader.SetFloat("warpStrength", warpStrength);
         heightMapComputeShader.SetInt ("floatToIntMultiplier", floatToIntMultiplier);
         heightMapComputeShader.SetInt("heightMapSize", map.Length);
 

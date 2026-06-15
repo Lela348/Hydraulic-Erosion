@@ -14,6 +14,11 @@ public class MeshEditor : Editor {
             terrainGenerator.ContructMesh();
         }
 
+        if(GUILayout.Button ("Save to PNG"))
+        {
+            terrainGenerator.SaveToPNG();
+        }
+
         string numIterationsString = terrainGenerator.numErosionIterations.ToString();
         if (terrainGenerator.numErosionIterations >= 1000) {
             numIterationsString = (terrainGenerator.numErosionIterations/1000) + "k";

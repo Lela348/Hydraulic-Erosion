@@ -1,5 +1,8 @@
 ﻿using System.Collections.Generic;
+using System.IO;
+using System.Net.NetworkInformation;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 
 public class TerrainGenerator : MonoBehaviour {
 
@@ -34,6 +37,10 @@ public class TerrainGenerator : MonoBehaviour {
     public int talusAngle = 45;
     public int thermalIterations = 2;
 
+    [Header("Export Settings")]
+    public string path = Application.dataPath;
+    public string filename = "heightmap1";
+
     // Internal
     float[] map;
     Mesh mesh;
@@ -50,6 +57,7 @@ public class TerrainGenerator : MonoBehaviour {
     public void Erode () {
         int hydraulicKernel = erosion.FindKernel("CSMain");
         int thermalKernel = erosion.FindKernel("ThermalCS");
+        int thermalKernel2 = erosion.FindKernel("ThermalSubtract");
 
         int numThreads = numErosionIterations / 1024;
 
@@ -98,7 +106,9 @@ public class TerrainGenerator : MonoBehaviour {
         ComputeBuffer mapBuffer = new ComputeBuffer (map.Length, sizeof (float));
         ComputeBuffer mapOutBuffer = new ComputeBuffer(map.Length, sizeof(float));
         mapBuffer.SetData (map);
+        mapOutBuffer.SetData (map);
         erosion.SetBuffer (0, "map", mapBuffer);
+        erosion.SetBuffer(thermalKernel, "map", mapBuffer);
 
         // Settings
         erosion.SetInt ("borderSize", erosionBrushRadius);
@@ -116,49 +126,44 @@ public class TerrainGenerator : MonoBehaviour {
         erosion.SetFloat ("startWater", startWater);
         erosion.SetInt ("talusAngle", talusAngle);
 
-
-        for (int i = 0; i < 2; i++) // you can increase this later
+        int intervals = 2;
+        for (int i = 0; i < intervals; i++) // you can increase this later
         {
-            erosion.SetInt("talusAngle", talusAngle);
-            ComputeBuffer debugBuffer = new ComputeBuffer(mapSize, sizeof(float));
-            // -------------------------
-            // HYDRAULIC PASS
-            // -------------------------
-            erosion.SetBuffer(hydraulicKernel, "map", mapBuffer);
-            erosion.Dispatch(hydraulicKernel, numThreads, 1, 1);
-
-            // -------------------------
+            //ComputeBuffer debugBuffer = new ComputeBuffer(mapSize, sizeof(float));
+            
             // THERMAL PASSES
-            // -------------------------
             for (int j = 0; j < thermalIterations; j++)
             {
-                // Clear output buffer
-                float[] empty = new float[map.Length];
-
                 erosion.SetBuffer(thermalKernel, "map", mapBuffer);
                 erosion.SetBuffer(thermalKernel, "mapOut", mapOutBuffer);
-
                 erosion.SetInt("mapSize", mapSizeWithBorder);
-                erosion.SetBuffer(thermalKernel, "debugBuffer", debugBuffer);
+                //erosion.SetBuffer(thermalKernel, "debugBuffer", debugBuffer);
 
+
+                // Subtract liest aus map (unveraendert) und schreibt in mapOut (bereits von Gather befuellt)
+                erosion.SetBuffer(thermalKernel2, "map", mapBuffer);
+                erosion.SetBuffer(thermalKernel2, "mapOut", mapOutBuffer);
+                erosion.Dispatch(thermalKernel2, (mapSizeWithBorder) / 8, (mapSizeWithBorder) / 8, 1);
+
+                // 8 threads
                 erosion.Dispatch(thermalKernel, mapSizeWithBorder / 8, mapSizeWithBorder / 8, 1);
-                float[] data = new float[mapSize];
-                debugBuffer.GetData(data);
-                for (int k = 0; k < data.Length; k++) {
-                    Debug.Log($"Data at index {k}: {data[k]}");
-                }
 
-                // Swap buffers
                 var temp = mapBuffer;
                 mapBuffer = mapOutBuffer;
                 mapOutBuffer = temp;
             }
+            // HYDRAULIC PASS
+            erosion.SetBuffer(hydraulicKernel, "map", mapBuffer);
+            erosion.Dispatch(hydraulicKernel, numThreads / intervals, 1, 1);
+
+            //debugBuffer.Release();
         }
 
         mapBuffer.GetData(map);
 
         // Release buffers
         mapBuffer.Release ();
+        mapOutBuffer?.Release ();
         randomIndexBuffer.Release ();
         brushIndexBuffer.Release ();
         brushWeightBuffer.Release ();
@@ -235,5 +240,24 @@ public class TerrainGenerator : MonoBehaviour {
 
         meshRenderer = meshHolder.GetComponent<MeshRenderer> ();
         meshFilter = meshHolder.GetComponent<MeshFilter> ();
+    }
+
+    public void SaveToPNG()
+    {
+        Texture2D texture = new Texture2D(mapSizeWithBorder, mapSizeWithBorder, TextureFormat.R8, false);
+
+        Color[] colors = new Color[map.Length];
+        for (int i = 0; i < map.Length; i++)
+        {
+            float h = map[i];
+            colors[i] = new Color(h, 0, 0);
+        }
+
+        texture.SetPixels(colors);
+        texture.Apply();
+
+        byte[] bytes = texture.EncodeToPNG();
+        File.WriteAllBytes($"{path}/{filename}.png", bytes);
+        Debug.Log($"Saved to: {path}/{filename}.png");
     }
 }
