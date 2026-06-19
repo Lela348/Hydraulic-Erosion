@@ -9,12 +9,12 @@ public class MeshEditor : Editor {
     public override void OnInspectorGUI () {
         DrawDefaultInspector ();
 
-        if (GUILayout.Button ("Generate Mesh")) {
+        if (GUILayout.Button("Generate Mesh")) {
             terrainGenerator.GenerateHeightMap ();
             terrainGenerator.ContructMesh();
         }
 
-        if(GUILayout.Button ("Save to PNG"))
+        if(GUILayout.Button("Save to PNG"))
         {
             terrainGenerator.SaveToPNG();
         }

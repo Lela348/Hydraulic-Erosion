@@ -1,6 +1,5 @@
 ﻿#pragma kernel CSMain
-#pragma kernel ThermalCS
-#pragma kernel ThermalSubtract
+#pragma kernel ThermalErode
 
 int talusAngle;
 RWStructuredBuffer<float> mapOut;
@@ -134,144 +133,94 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     
 }
 
+float cellAspect; 
+float thermalRate; 
 
-//In
+//neighbor offsets
+// 6 3 7
+// 0 C 1
+// 4 2 5
+static const int2 nOffsets[8] =
+{
+    int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1),
+    int2(-1, -1), int2(1, -1), int2(-1, 1), int2(1, 1)
+};
+
+void ComputeOutgoing(int px, int py, float tanTalus, out float outTotal, out float totalDelta)
+{
+    outTotal = 0;
+    totalDelta = 0;
+    if (px < 0 || px >= mapSize || py < 0 || py >= mapSize)
+        return;
+
+    float hP = map[py * mapSize + px]; //height at point p
+    float maxExcess = 0;
+
+    [unroll]
+    for (int i = 0; i < 8; i++)
+    {
+        int nx = px + nOffsets[i].x;
+        int ny = py + nOffsets[i].y;
+        
+        //border check
+        if (nx < 0 || nx >= mapSize || ny < 0 || ny >= mapSize)
+            continue;
+
+        float delta = hP - map[ny * mapSize + nx]; // height difference to neighbouring cell
+        if (delta <= 0)
+            continue;
+
+        float dist = (i < 4) ? 1.0 : 1.41421356; // distance to neighbour: root 2 for diagonal neighbours, 1 for cardinal
+        float maxStable = tanTalus * dist * cellAspect; // maximum height difference for stable cell
+        if (delta > maxStable)
+        {
+            totalDelta += delta;
+            maxExcess = max(maxExcess, delta - maxStable); // highest difference
+        }
+    }
+    outTotal = thermalRate * maxExcess;
+}
+
 [numthreads(8, 8, 1)]
-void ThermalCS(uint3 id : SV_DispatchThreadID)
+void ThermalErode(uint3 id : SV_DispatchThreadID)
 {
     int x = id.x;
     int y = id.y;
-
     if (x >= mapSize || y >= mapSize)
         return;
 
     uint index = y * mapSize + x;
-    float current = map[index];
-    
-    mapOut[index] = map[index];
+    float h = map[index];
+    float tanTalus = tan(radians((float) talusAngle));
 
-    int indices[8] = { 0, 0, 0, 0, 0, 0, 0, 0}; // 8-neighbour indices
-    float deltas[8] = { 0, 0, 0, 0, 0, 0, 0, 0};
-    float slopes[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-    float totalDeltaSum = 0; //sum of all height differences to neighbors w/ talus angle exceeded
-    float maxSediment = 0;
-    
-    float tanTalus = tan(radians(talusAngle)) / 100;
+    // outgoing
+    float outCell, totalDeltaC;
+    ComputeOutgoing(x, y, tanTalus, outCell, totalDeltaC);
+    float newHeight = h - outCell;
 
-    // 8-neighbour offsets
-    int2 offsets[8] =
-    {
-        int2(-1, 0), int2(1, 0),
-        int2(0, -1), int2(0, 1),
-        int2(-1, -1), int2(1, -1),
-        int2(-1, 1), int2(1, 1)
-    };
-
+    // incoming -> caluclate outgoing from neighbours
+    [unroll]
     for (int i = 0; i < 8; i++)
     {
-        int nx = x + offsets[i].x;
-        int ny = y + offsets[i].y;
-
-        if (nx < 0 || nx >= mapSize - 1 || ny < 0 || ny >= mapSize - 1)
+        int nx = x + nOffsets[i].x;
+        int ny = y + nOffsets[i].y;
+        if (nx < 0 || nx >= mapSize || ny < 0 || ny >= mapSize)
             continue;
 
-        int nIndex = ny * mapSize + nx;
-        float delta = map[nIndex] - current; // positive = neighbor is higher, negative = neighbor is lower
-        float slope = (delta / length(offsets[i]));
-
-        if (delta > 0 && slope > tanTalus)
-        {
-            deltas[i] = delta;
-            totalDeltaSum += delta;
-        }
-    }
-
-    if (totalDeltaSum == 0)
-    {
-        mapOut[index] = current;
-        return;
-    }
-
-    //maximum amount of sediment that a cell can receive
-    float maxVal = 0;
-    for (int j = 0; j < 8; j++)
-        maxVal = max(maxVal, deltas[j]);
-    maxSediment = maxVal * 0.45; 
-
-    // Zweite Schleife: empfangenes Sediment berechnen
-    float totalReceived = 0;
-
-    for (int k = 0; k < 8; k++)
-    {
-        if (deltas[k] == 0)
+        float delta = map[ny * mapSize + nx] - h; // difference to neighbour, higher than 0 -> neighbour can give sediment
+        if (delta <= 0)
             continue;
 
-        totalReceived += maxSediment * (deltas[k] / totalDeltaSum);
+        float dist = (i < 4) ? 1.0 : 1.41421356; // distance to neighbour: root 2 for diagonal neighbours, 1 for cardinal
+        float maxStable = tanTalus * dist * cellAspect; // maximal absoute height difference for stable edge
+        if (delta <= maxStable)
+            continue; // edge stable -> give no sediment
+
+        float outN, totalDeltaN;
+        ComputeOutgoing(nx, ny, tanTalus, outN, totalDeltaN); // outgoing from neighbour's view
+        if (totalDeltaN > 0)
+            newHeight += outN * (delta / totalDeltaN); // N spreads outgoing sediment proportionally to all qualifying lower neighbours
     }
 
-    mapOut[index] = current + totalReceived;
-}
-
-//Out
-[numthreads(8, 8, 1)]
-void ThermalSubtract(uint3 id : SV_DispatchThreadID)
-{
-    int x = id.x;
-    int y = id.y;
-    int border = 10;
-    
-    if (x <= border || x >= mapSize - border - 1 || y <= border || y >= mapSize - border - 1)
-        return;
-
-    uint index = y * mapSize + x;
-    float current = map[index]; // liest aus originalem map, nicht mapOut!
-    
-    float tanTalus = tan(radians(talusAngle));
-    
-    int2 offsets[8] =
-    {
-        int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1),
-        int2(-1, -1), int2(1, -1), int2(-1, 1), int2(1, 1)
-    };
-
-    // Berechne wie viel dieser Pixel an niedrigere Nachbarn abgibt
-    float totalDeltaSum = 0;
-    float deltas[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-
-    for (int i = 0; i < 8; i++)
-    {
-        int nx = x + offsets[i].x;
-        int ny = y + offsets[i].y;
-        if (nx <= border || nx >= mapSize - border - 1 || ny <= border || ny >= mapSize - border - 1)
-            continue;
-
-        int nIndex = ny * mapSize + nx;
-        float delta = current - map[nIndex]; // ich bin hoeher als Nachbar
-        float slope = (delta / length(offsets[i])) * 100;
-
-        if (delta > 0 && slope > tanTalus)
-        {
-            deltas[i] = delta;
-            totalDeltaSum += delta;
-        }
-    }
-
-    if (totalDeltaSum == 0)
-        return;
-
-    float maxVal = 0;
-    for (int j = 0; j < 8; j++)
-        maxVal = max(maxVal, deltas[j]);
-    float maxSediment = maxVal * 0.45;
-
-    float totalGiven = 0;
-    for (int k = 0; k < 8; k++)
-    {
-        if (deltas[k] == 0)
-            continue;
-        totalGiven += maxSediment * (deltas[k] / totalDeltaSum);
-    }
-
-    // Subtrahiere von mapOut was dieser Pixel abgegeben hat
-    mapOut[index] -= totalGiven;
+    mapOut[index] = newHeight;
 }

@@ -1,8 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.IO;
-using System.Net.NetworkInformation;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering;
 
 public class TerrainGenerator : MonoBehaviour {
 
@@ -35,7 +33,11 @@ public class TerrainGenerator : MonoBehaviour {
     [Header("Erosion Settings")]
     [Range(0, 90)]
     public int talusAngle = 45;
-    public int thermalIterations = 2;
+    public int thermalIterations = 10;
+    [Range(0, 0.45f)]
+    public float thermalRate = 0.4f;
+    public bool thermalErosion = true;
+
 
     [Header("Export Settings")]
     public string path = Application.dataPath;
@@ -56,8 +58,7 @@ public class TerrainGenerator : MonoBehaviour {
 
     public void Erode () {
         int hydraulicKernel = erosion.FindKernel("CSMain");
-        int thermalKernel = erosion.FindKernel("ThermalCS");
-        int thermalKernel2 = erosion.FindKernel("ThermalSubtract");
+        int thermalKernel = erosion.FindKernel("ThermalErode");
 
         int numThreads = numErosionIterations / 1024;
 
@@ -124,40 +125,34 @@ public class TerrainGenerator : MonoBehaviour {
         erosion.SetFloat ("gravity", gravity);
         erosion.SetFloat ("startSpeed", startSpeed);
         erosion.SetFloat ("startWater", startWater);
+
         erosion.SetInt ("talusAngle", talusAngle);
+        erosion.SetFloat("cellAspect", (2 * scale / mapSize) / elevationScale);  
+        erosion.SetFloat("thermalRate", thermalRate);  
 
-        int intervals = 2;
-        for (int i = 0; i < intervals; i++) // you can increase this later
+        int intervals = 10;
+        int groups = Mathf.CeilToInt(mapSizeWithBorder / 8f);
+
+        for (int i = 0; i < intervals; i++)
         {
-            //ComputeBuffer debugBuffer = new ComputeBuffer(mapSize, sizeof(float));
-            
-            // THERMAL PASSES
-            for (int j = 0; j < thermalIterations; j++)
+            // thermal pass
+            if (thermalErosion)
             {
-                erosion.SetBuffer(thermalKernel, "map", mapBuffer);
-                erosion.SetBuffer(thermalKernel, "mapOut", mapOutBuffer);
-                erosion.SetInt("mapSize", mapSizeWithBorder);
-                //erosion.SetBuffer(thermalKernel, "debugBuffer", debugBuffer);
+                for (int j = 0; j < thermalIterations; j++)
+                {
+                    erosion.SetBuffer(thermalKernel, "map", mapBuffer);
+                    erosion.SetBuffer(thermalKernel, "mapOut", mapOutBuffer);
+                    erosion.Dispatch(thermalKernel, groups, groups, 1);
 
-
-                // Subtract liest aus map (unveraendert) und schreibt in mapOut (bereits von Gather befuellt)
-                erosion.SetBuffer(thermalKernel2, "map", mapBuffer);
-                erosion.SetBuffer(thermalKernel2, "mapOut", mapOutBuffer);
-                erosion.Dispatch(thermalKernel2, (mapSizeWithBorder) / 8, (mapSizeWithBorder) / 8, 1);
-
-                // 8 threads
-                erosion.Dispatch(thermalKernel, mapSizeWithBorder / 8, mapSizeWithBorder / 8, 1);
-
-                var temp = mapBuffer;
-                mapBuffer = mapOutBuffer;
-                mapOutBuffer = temp;
+                    (mapBuffer, mapOutBuffer) = (mapOutBuffer, mapBuffer);
+                }
             }
-            // HYDRAULIC PASS
+            // hydraulic pass
             erosion.SetBuffer(hydraulicKernel, "map", mapBuffer);
             erosion.Dispatch(hydraulicKernel, numThreads / intervals, 1, 1);
-
-            //debugBuffer.Release();
         }
+
+        mapBuffer.GetData(map);
 
         mapBuffer.GetData(map);
 
@@ -244,13 +239,20 @@ public class TerrainGenerator : MonoBehaviour {
 
     public void SaveToPNG()
     {
-        Texture2D texture = new Texture2D(mapSizeWithBorder, mapSizeWithBorder, TextureFormat.R8, false);
+        int border = (mapSizeWithBorder - mapSize) / 2;
 
-        Color[] colors = new Color[map.Length];
-        for (int i = 0; i < map.Length; i++)
+        Texture2D texture = new Texture2D(mapSize, mapSize, TextureFormat.R8, false);
+        Color[] colors = new Color[mapSize * mapSize];
+
+        for (int y = 0; y < mapSize; y++)
         {
-            float h = map[i];
-            colors[i] = new Color(h, 0, 0);
+            for (int x = 0; x < mapSize; x++)
+            {
+                int srcIndex = (y + border) * mapSizeWithBorder + (x + border);
+                int dstIndex = y * mapSize + x;
+                float h = map[srcIndex];
+                colors[dstIndex] = new Color(h, 0, 0);
+            }
         }
 
         texture.SetPixels(colors);

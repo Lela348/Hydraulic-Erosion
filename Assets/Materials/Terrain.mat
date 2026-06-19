@@ -86,7 +86,7 @@ Material:
     - _GlossyReflections: 1
     - _GrassBlendAmount: 1
     - _GrassFlatnessThreshold: 0.1
-    - _GrassSlopeThreshold: 0.056
+    - _GrassSlopeThreshold: 0.146
     - _GrassSmoothness: 0.1
     - _HeightBlend: 0.05
     - _MaxHeight: 10
@@ -98,7 +98,7 @@ Material:
     - _SandHeight: 0.15
     - _SandSmoothness: 0.05
     - _SmoothnessTextureChannel: 0
-    - _SnowHeight: 0.856
+    - _SnowHeight: 1
     - _SnowNoiseScale: 5
     - _SnowNoiseStrength: 0.1
     - _SnowNormalBlend: 0.3

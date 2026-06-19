@@ -43,6 +43,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _GrassTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _MainTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -56,6 +60,18 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _ParallaxMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _RockTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SandTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SnowTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -81,6 +97,8 @@ Material:
     - _GrassHeightFadePower: 2.37
     - _GrassMaxHeight: 0.75
     - _GrassSlopeThreshold: 0.32
+    - _GrassSmoothness: 0.1
+    - _HeightBlend: 0.05
     - _MaxHeight: 10
     - _Metallic: 0
     - _Mode: 0
@@ -88,9 +106,18 @@ Material:
     - _Parallax: 0.02
     - _RimFac: 1
     - _RimPower: 2.23
+    - _RockSmoothness: 0.15
+    - _SandHeight: 0.15
+    - _SandSmoothness: 0.05
     - _SmoothnessTextureChannel: 0
+    - _SnowHeight: 0.8
+    - _SnowNoiseScale: 5
+    - _SnowNoiseStrength: 0.1
+    - _SnowNormalBlend: 0.3
+    - _SnowSmoothness: 0.6
     - _SpecularHighlights: 1
     - _SrcBlend: 1
+    - _TextureScale: 10
     - _UVSec: 0
     - _ZWrite: 1
     m_Colors:
@@ -103,5 +130,7 @@ Material:
     - _RimColour: {r: 0.8301887, g: 0.4694731, b: 0.07440368, a: 1}
     - _RockColour: {r: 0.23584908, g: 0.11488772, b: 0.070087224, a: 1}
     - _RockColour2: {r: 0.254717, g: 0.11335015, b: 0.054067295, a: 1}
+    - _SandColour: {r: 0.76, g: 0.7, b: 0.5, a: 1}
+    - _SnowColour: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
