@@ -1,1 +1,2 @@
+*.unity filter=lfs diff=lfs merge=lfs -text
 Assets/Scenes/Large[[:space:]]Terrain.unity filter=lfs diff=lfs merge=lfs -text
